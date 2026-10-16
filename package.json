@@ -1,0 +1,27 @@
+{
+  "name": "scan-saver",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Drop open scan edges to the lowest point and export a solid, including STEP for CAD.",
+  "scripts": {
+    "test": "node --test",
+    "build": "node scripts/build.mjs",
+    "start": "node scripts/build.mjs && python3 -m http.server 4173"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PangLOL/ScanSaver.git"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "cdt2d": "^1.0.0",
+    "meshoptimizer": "^0.22.0",
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "@fontsource/fraunces": "^5.2.5",
+    "@fontsource/public-sans": "^5.2.5",
+    "esbuild": "^0.24.2"
+  }
+}
