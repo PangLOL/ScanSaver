@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scan Saver</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23141311' width='32' height='32' rx='8'/%3E%3Cpath fill='none' stroke='%23e7d7c4' stroke-width='1.6' d='M6 20c4-8 16-8 20 0'/%3E%3Cpath fill='none' stroke='%23c6531a' stroke-width='1.6' d='M6 20v5h20v-5'/%3E%3C/svg%3E">
+  <style>__CSS__</style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="brand">
+        <div class="mark">Scan Saver</div>
+        <div class="sub">Open edges fall to the lowest point.</div>
+      </div>
+      <div class="filebar">
+        <span id="fileName">No scan loaded</span>
+        <button class="ghost" id="openBtn" type="button">Open</button>
+        <button class="ghost" id="sampleBtn" type="button">Sample</button>
+      </div>
+    </header>
+    <div class="workspace">
+      <section class="stage" id="stage">
+        <canvas id="view"></canvas>
+        <div class="hint" id="hint">
+          <div>
+            <strong>Drop a scan</strong>
+            <span>STL, OBJ, PLY, or 3MF. Nothing is uploaded.</span>
+          </div>
+        </div>
+        <div class="progress" id="progress" hidden>
+          <span id="progressLabel">Working</span>
+          <span>The view stays responsive</span>
+        </div>
+        <div class="legend" id="legend" hidden>
+          <span><i class="swatch"></i>Open edge</span>
+          <span><i class="swatch plane"></i>Base</span>
+        </div>
+      </section>
+      <aside class="panel">
+        <section>
+          <p class="kicker">Pull</p>
+          <div class="axis-row">
+            <div class="seg" id="axisSeg" role="group" aria-label="Pull axis">
+              <button type="button" data-axis="0" aria-pressed="false">X</button>
+              <button type="button" data-axis="1" aria-pressed="false">Y</button>
+              <button type="button" data-axis="2" aria-pressed="true">Z</button>
+            </div>
+            <button class="flip" id="flipBtn" type="button" aria-pressed="false">Flip</button>
+          </div>
+          <p class="readout" id="baseReadout">Base waits for a scan.</p>
+        </section>
+        <section>
+          <button class="primary" id="formBtn" type="button" disabled>Drop edges</button>
+          <p class="note" id="formNote">Walls fall straight to the base, then the floor is capped.</p>
+        </section>
+        <section>
+          <p class="kicker">Result</p>
+          <div class="view-toggle seg" id="viewToggle" hidden>
+            <button type="button" data-view="scan" aria-pressed="false">Scan</button>
+            <button type="button" data-view="solid" aria-pressed="true">Solid</button>
+          </div>
+          <dl class="stats" id="stats">
+            <div><dt>Triangles</dt><dd id="statTris">—</dd></div>
+            <div><dt>Open edges</dt><dd id="statOpen">—</dd></div>
+            <div><dt>State</dt><dd id="statState">—</dd></div>
+          </dl>
+        </section>
+        <section>
+          <p class="kicker">CAD solid</p>
+          <div class="slider">
+            <label for="faces">STEP faces <output id="faceOut">8000</output></label>
+            <input id="faces" type="range" min="800" max="20000" step="200" value="8000">
+          </div>
+          <div class="unit">
+            <label for="unit">Unit label</label>
+            <select id="unit">
+              <option value="mm">Millimetres</option>
+              <option value="cm">Centimetres</option>
+              <option value="m">Metres</option>
+              <option value="in">Inches</option>
+            </select>
+          </div>
+          <p class="note">STEP is a closed faceted solid. Dense scans are lightened so CAD can open them. STL keeps every formed triangle. The unit label does not rescale the numbers.</p>
+        </section>
+        <p class="banner" id="banner" hidden></p>
+        <div class="exports">
+          <button class="texty" id="stlBtn" type="button" disabled>Download STL</button>
+          <button class="texty" id="stepBtn" type="button" disabled>Download STEP</button>
+        </div>
+        <p class="quiet">Runs in this tab on Windows, Mac, and Linux. No server and no install.</p>
+      </aside>
+    </div>
+  </div>
+  <input id="file" type="file" accept=".stl,.obj,.ply,.3mf,.STL,.OBJ,.PLY,.3MF" hidden>
+  <script>__JS__</script>
+</body>
+</html>
