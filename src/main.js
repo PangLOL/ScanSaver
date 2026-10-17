@@ -403,8 +403,8 @@ window.addEventListener("drop", (event) => {
 
 function readFile(file) {
   const ext = (file.name.split(".").pop() || "").toLowerCase();
-  if (!["stl", "obj", "ply"].includes(ext)) {
-    showBanner("Use an STL, OBJ, or PLY scan.");
+  if (!["stl", "obj", "ply", "3mf"].includes(ext)) {
+    showBanner("Use an STL, OBJ, PLY, or 3MF scan.");
     return;
   }
   const reader = new FileReader();
@@ -462,8 +462,16 @@ formBtn.addEventListener("click", async () => {
     statState.className = result.watertight ? "state-ok" : "state-warn";
     const notes = [];
     if (result.openEdgesBefore === 0) notes.push("The scan was already closed, so no edges were dropped.");
-    if (!result.watertight) notes.push("Some edges are still open. Non-manifold junctions in the scan were left alone.");
-    else if (result.nonManifold) notes.push("Non-manifold junctions were left as they were. The open rims were dropped.");
+    if (result.uncapped > 0) {
+      notes.push("The rim crosses itself, so that part of the floor was left open. The walls are still in the export.");
+    } else if (result.unclosedChains > 0 && !result.watertight) {
+      notes.push("Some open edges do not meet in a closed rim, so that floor was left open. The walls are still in the export.");
+    }
+    if (!result.watertight && !(result.uncapped > 0) && !(result.unclosedChains > 0)) {
+      notes.push("Some edges are still open. Non-manifold junctions in the scan were left alone.");
+    } else if (result.watertight && result.nonManifold) {
+      notes.push("Non-manifold junctions were left as they were. The open rims were dropped.");
+    }
     showBanner(notes.join(" "));
     showMesh(solidView, true);
     frame(result.bounds, result.axis);

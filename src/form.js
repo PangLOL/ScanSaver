@@ -67,6 +67,22 @@ function dedupeLoop(loop) {
   return out;
 }
 
+function loopExtent(positions, loop, u, v) {
+  let minU = Infinity;
+  let minV = Infinity;
+  let maxU = -Infinity;
+  let maxV = -Infinity;
+  for (const vi of loop) {
+    const x = positions[vi * 3 + u];
+    const y = positions[vi * 3 + v];
+    if (x < minU) minU = x;
+    if (x > maxU) maxU = x;
+    if (y < minV) minV = y;
+    if (y > maxV) maxV = y;
+  }
+  return (maxU - minU) * (maxV - minV);
+}
+
 function interiorPoint(loop, positions, u, v) {
   let best = 0;
   let bestLen = -1;
@@ -192,9 +208,13 @@ export function formMesh(mesh, options = {}) {
   const [u, v] = UV[axis];
   const floor = [];
   const projectedLoops = [];
+  let uncapped = 0;
   for (const loop of loops.closed) {
     const mapped = dedupeLoop(loop.map((vi) => projectionOf(vi)));
-    if (mapped.length >= 3 && Math.abs(signedArea(pos, mapped, u, v)) > eps * eps) projectedLoops.push(mapped);
+    if (mapped.length < 3) continue;
+    const area = Math.abs(signedArea(pos, mapped, u, v));
+    if (area > eps * eps) projectedLoops.push(mapped);
+    else if (loopExtent(pos, mapped, u, v) > eps * eps) uncapped++;
   }
 
   const nodes = projectedLoops
@@ -232,18 +252,21 @@ export function formMesh(mesh, options = {}) {
     const poly = [];
     const edges = [];
     for (const loop of group) {
-      const base = poly.length;
+      const baseIndex = poly.length;
       for (const vi of loop) poly.push(vi);
-      for (let i = 0; i < loop.length; i++) edges.push([base + i, base + ((i + 1) % loop.length)]);
+      for (let i = 0; i < loop.length; i++) edges.push([baseIndex + i, baseIndex + ((i + 1) % loop.length)]);
     }
     const points = poly.map((vi) => [pos[vi * 3 + u], pos[vi * 3 + v]]);
     let cut = [];
     try {
       cut = cdt2d(points, edges, { exterior: false }) || [];
     } catch {
+      cut = [];
+    }
+    if (cut.length < 1) {
+      uncapped++;
       continue;
     }
-    if (cut.length < 1) continue;
     for (const tri of cut) floor.push(poly[tri[0]], poly[tri[1]], poly[tri[2]]);
     capped++;
   }
@@ -302,6 +325,7 @@ export function formMesh(mesh, options = {}) {
     watertight: after.openEdges === 0 && solid.indices.length >= 12,
     triangles: (solid.indices.length / 3) | 0,
     capped,
+    uncapped,
     volume,
   };
 }

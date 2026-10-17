@@ -16,7 +16,7 @@ function progress(id, label) {
 }
 
 async function viewOf(mesh) {
-  const cap = 180000;
+  const cap = 400000;
   if (faceCount(mesh) <= cap) {
     return { positions: new Float32Array(mesh.positions), indices: new Uint32Array(mesh.indices) };
   }
@@ -78,9 +78,11 @@ self.onmessage = async (event) => {
         openEdgesBefore: result.openEdgesBefore,
         openEdges: result.openEdges,
         nonManifold: result.nonManifold,
+        unclosedChains: result.unclosedChains,
         watertight: result.watertight,
         triangles: result.triangles,
         capped: result.capped,
+        uncapped: result.uncapped,
       });
     } else if (msg.type === "stl") {
       if (!formed) throw new Error("Drop the edges before exporting.");

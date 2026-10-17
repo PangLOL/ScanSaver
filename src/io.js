@@ -1,3 +1,4 @@
+import { strFromU8, unzipSync } from "fflate";
 import { cleanMesh, weldMesh } from "./mesh.js";
 
 function asBytes(buffer) {
@@ -16,7 +17,8 @@ export function parseMesh(buffer, extension) {
   if (ext === "stl") return parseSTL(bytes);
   if (ext === "obj") return parseOBJ(new TextDecoder().decode(bytes));
   if (ext === "ply") return parsePLY(bytes);
-  throw new Error("Use an STL, OBJ, or PLY scan.");
+  if (ext === "3mf") return parse3MF(bytes);
+  throw new Error("Use an STL, OBJ, PLY, or 3MF scan.");
 }
 
 function looksLikeAsciiSTL(bytes) {
@@ -257,6 +259,145 @@ function parsePlyElementsInOrder(bytes, headerEnd, format, elements) {
   }
   if (!vertexCount || !rawIndices.length) throw new Error("This PLY has no triangles.");
   return meshFrom(positions, rawIndices);
+}
+
+function xmlAttr(tag, name) {
+  const match = tag.match(new RegExp("(?:^|\\s)" + name + "\\s*=\\s*\"([^\"]*)\"", "i"));
+  return match ? match[1] : null;
+}
+
+function identityMatrix() {
+  return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+}
+
+function matrixFromTransform(text) {
+  if (!text) return identityMatrix();
+  const values = text.trim().split(/\s+/).map(Number);
+  if (values.length !== 12 || values.some((value) => !Number.isFinite(value))) {
+    throw new Error("This 3MF has a transform that cannot be read.");
+  }
+  return [
+    values[0], values[3], values[6], values[9],
+    values[1], values[4], values[7], values[10],
+    values[2], values[5], values[8], values[11],
+    0, 0, 0, 1,
+  ];
+}
+
+function multiplyMatrix(left, right) {
+  const out = new Array(16);
+  for (let row = 0; row < 4; row++) {
+    for (let col = 0; col < 4; col++) {
+      out[row * 4 + col] =
+        left[row * 4] * right[col] +
+        left[row * 4 + 1] * right[4 + col] +
+        left[row * 4 + 2] * right[8 + col] +
+        left[row * 4 + 3] * right[12 + col];
+    }
+  }
+  return out;
+}
+
+function applyMatrix(matrix, x, y, z) {
+  return [
+    matrix[0] * x + matrix[1] * y + matrix[2] * z + matrix[3],
+    matrix[4] * x + matrix[5] * y + matrix[6] * z + matrix[7],
+    matrix[8] * x + matrix[9] * y + matrix[10] * z + matrix[11],
+  ];
+}
+
+function collect3mf(xml) {
+  const objects = new Map();
+  const objectPattern = /<([\w.:-]*object)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
+  let match;
+  while ((match = objectPattern.exec(xml))) {
+    const body = match[3];
+    const vertices = [];
+    const vertexPattern = /<[\w.:-]*vertex\b([^>]*)\/?>/gi;
+    let vertexMatch;
+    while ((vertexMatch = vertexPattern.exec(body))) {
+      vertices.push(Number(xmlAttr(vertexMatch[1], "x")), Number(xmlAttr(vertexMatch[1], "y")), Number(xmlAttr(vertexMatch[1], "z")));
+    }
+    const triangles = [];
+    const trianglePattern = /<[\w.:-]*triangle\b([^>]*)\/?>/gi;
+    let triangleMatch;
+    while ((triangleMatch = trianglePattern.exec(body))) {
+      const a = Number(xmlAttr(triangleMatch[1], "v1"));
+      const b = Number(xmlAttr(triangleMatch[1], "v2"));
+      const c = Number(xmlAttr(triangleMatch[1], "v3"));
+      triangles.push(a, b, c);
+    }
+    const components = [];
+    const componentPattern = /<[\w.:-]*component\b([^>]*)\/?>/gi;
+    let componentMatch;
+    while ((componentMatch = componentPattern.exec(body))) {
+      components.push({
+        id: xmlAttr(componentMatch[1], "objectid"),
+        transform: xmlAttr(componentMatch[1], "transform"),
+      });
+    }
+    objects.set(xmlAttr(match[2], "id"), { vertices, triangles, components });
+  }
+
+  const items = [];
+  const itemPattern = /<[\w.:-]*item\b([^>]*)\/?>/gi;
+  let itemMatch;
+  while ((itemMatch = itemPattern.exec(xml))) {
+    items.push({ id: xmlAttr(itemMatch[1], "objectid"), transform: xmlAttr(itemMatch[1], "transform") });
+  }
+  if (!items.length) {
+    for (const id of objects.keys()) items.push({ id, transform: null });
+  }
+
+  const positions = [];
+  const indices = [];
+  function appendObject(id, matrix, stack) {
+    const object = objects.get(id);
+    if (!object) throw new Error("This 3MF build points at a missing object.");
+    if (stack.has(id)) throw new Error("This 3MF has objects that refer to each other in a loop.");
+    stack.add(id);
+    if (object.triangles.length >= 3) {
+      const base = (positions.length / 3) | 0;
+      for (let i = 0; i < object.vertices.length; i += 3) {
+        const point = applyMatrix(matrix, object.vertices[i], object.vertices[i + 1], object.vertices[i + 2]);
+        positions.push(point[0], point[1], point[2]);
+      }
+      for (const index of object.triangles) indices.push(index + base);
+    }
+    for (const component of object.components) {
+      appendObject(component.id, multiplyMatrix(matrix, matrixFromTransform(component.transform)), stack);
+    }
+    stack.delete(id);
+  }
+
+  for (const item of items) appendObject(item.id, matrixFromTransform(item.transform), new Set());
+  return { positions, indices };
+}
+
+export function parse3MF(bytes) {
+  bytes = asBytes(bytes);
+  let files;
+  try {
+    files = unzipSync(bytes);
+  } catch {
+    throw new Error("This 3MF could not be opened.");
+  }
+  const names = Object.keys(files).filter((name) => name.toLowerCase().endsWith(".model"));
+  if (!names.length) throw new Error("This 3MF has no mesh.");
+  names.sort((a, b) => Number(a.toLowerCase().endsWith("3d/3dmodel.model")) - Number(b.toLowerCase().endsWith("3d/3dmodel.model")));
+  names.reverse();
+  const positions = [];
+  const indices = [];
+  for (const name of names) {
+    const part = collect3mf(strFromU8(files[name]));
+    if (part.indices.length < 3) continue;
+    const base = (positions.length / 3) | 0;
+    positions.push(...part.positions);
+    for (const index of part.indices) indices.push(index + base);
+    if (name.toLowerCase().endsWith("3d/3dmodel.model")) break;
+  }
+  if (indices.length < 3) throw new Error("This 3MF has no triangles.");
+  return meshFrom(positions, indices);
 }
 
 export function writeSTL(mesh, name = "scan") {

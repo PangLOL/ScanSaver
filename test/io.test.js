@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { strToU8, zipSync } from "fflate";
 import { formMesh } from "../src/form.js";
 import { parseMesh, parseOBJ, parsePLY, parseSTL, writeSTL } from "../src/io.js";
 import { faceCount } from "../src/mesh.js";
@@ -75,4 +76,44 @@ end_header
   bytes.set(new Uint8Array(payload), header.length);
   const binary = parseMesh(bytes, "ply");
   assert.equal(faceCount(binary), 2);
+});
+
+test("a 3MF component transform is applied and the triangle still forms", () => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+  <resources>
+    <object id="1" type="model">
+      <mesh>
+        <vertices>
+          <vertex x="0" y="0" z="0"/>
+          <vertex x="2" y="0" z="1"/>
+          <vertex x="0" y="2" z="1"/>
+        </vertices>
+        <triangles>
+          <triangle v1="0" v2="1" v3="2"/>
+        </triangles>
+      </mesh>
+    </object>
+    <object id="2" type="model">
+      <components>
+        <component objectid="1" transform="1 0 0 0 1 0 0 0 1 0 0 5"/>
+      </components>
+    </object>
+  </resources>
+  <build>
+    <item objectid="2"/>
+  </build>
+</model>`;
+  const packed = zipSync({ "3D/3dmodel.model": strToU8(xml) });
+  const parsed = parseMesh(packed, "3mf");
+  assert.equal(faceCount(parsed), 1);
+  const z = [];
+  for (let i = 2; i < parsed.positions.length; i += 3) z.push(parsed.positions[i]);
+  z.sort((a, b) => a - b);
+  assert.ok(Math.abs(z[0] - 5) < 1e-4);
+  assert.ok(Math.abs(z[2] - 6) < 1e-4);
+  const result = formMesh(parsed);
+  assert.equal(result.watertight, true);
+  assert.equal(result.base, 5);
+  assert.ok(Math.abs(result.volume - 4 / 3) < 1e-3);
 });

@@ -93,6 +93,64 @@ test("the pull can run along X", () => {
   assert.ok(faceCount(result.mesh) > 1);
 });
 
+test("a box with the bottom deleted closes, and every new vertex sits on the original minimum Z", () => {
+  const positions = [
+    0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1,
+    0, 0, 2, 1, 0, 2, 1, 1, 2, 0, 1, 2,
+    0.5, 0.5, 0,
+  ];
+  const indices = [
+    0, 1, 5, 0, 5, 4,
+    1, 2, 6, 1, 6, 5,
+    2, 3, 7, 2, 7, 6,
+    3, 0, 4, 3, 4, 7,
+    4, 5, 8, 5, 6, 8, 6, 4, 8,
+    4, 6, 7,
+  ];
+  let minZ = Infinity;
+  const original = new Set();
+  for (let i = 0; i < positions.length; i += 3) {
+    minZ = Math.min(minZ, positions[i + 2]);
+    original.add(positions[i] + "," + positions[i + 1] + "," + positions[i + 2]);
+  }
+  const result = formMesh(mesh(positions, indices));
+  assert.equal(result.base, minZ);
+  assert.equal(result.watertight, true);
+  assert.equal(result.openEdges, 0);
+  assert.equal(result.uncapped, 0);
+  let added = 0;
+  const formed = result.mesh.positions;
+  for (let i = 0; i < formed.length; i += 3) {
+    const key = formed[i] + "," + formed[i + 1] + "," + formed[i + 2];
+    if (original.has(key)) continue;
+    added++;
+    assert.ok(Math.abs(formed[i + 2] - minZ) < 1e-4);
+  }
+  assert.ok(added >= 4);
+  assert.ok(result.volume > 0);
+});
+
+test("a crossing rim keeps the walls and reports the open floor", () => {
+  const positions = [0, 0, 2, 3, 1, 3, 1, 2, 2, 2, -1, 4];
+  const indices = [0, 1, 2, 0, 2, 3];
+  const original = new Set();
+  for (let i = 0; i < positions.length; i += 3) original.add(positions[i] + "," + positions[i + 1] + "," + positions[i + 2]);
+  const result = formMesh(mesh(positions, indices));
+  assert.ok(result.uncapped >= 1);
+  assert.equal(result.capped, 0);
+  assert.equal(result.watertight, false);
+  assert.ok(result.triangles > 2);
+  assert.equal(result.base, 2);
+  let kept = false;
+  const formed = result.mesh.positions;
+  for (let i = 0; i < formed.length; i += 3) {
+    const key = formed[i] + "," + formed[i + 1] + "," + formed[i + 2];
+    if (Math.abs(formed[i] - 2) < 1e-4 && Math.abs(formed[i + 1] + 1) < 1e-4 && Math.abs(formed[i + 2] - 4) < 1e-4) kept = true;
+    if (!original.has(key)) assert.ok(Math.abs(formed[i + 2] - result.base) < 1e-4);
+  }
+  assert.equal(kept, true);
+});
+
 test("the sample scan becomes a closed solid", () => {
   const sample = sampleScan();
   const before = faceCount(sample.mesh);
